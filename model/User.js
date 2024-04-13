@@ -20,9 +20,13 @@ const User = sequelize.define('users',{
       type: Sequelize.STRING,
       allowNull: false
   },
+  profilePicture:{
+    type: Sequelize.TEXT,
+    allowNull: true
+  },
   role:{
       type: Sequelize.ENUM("Teacher", "Student"),
-      allowNull: true
+      allowNull: false
   }
 },{
   timestamps: false

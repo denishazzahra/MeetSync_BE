@@ -9,9 +9,13 @@ const db_host = process.env.DB_HOST
 //nama database tersebut ditaruh dibawah
 const db_name = "MeetSync"
 
+//timezone WIB
+const timezone = '+07:00';
+
 const sequelize = new Sequelize(db_name, db_username, db_password, {
   host: db_host,
   dialect: 'mysql',
+  timezone: timezone
 });
 
 module.exports = sequelize

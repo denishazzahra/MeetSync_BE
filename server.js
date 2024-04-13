@@ -1,6 +1,7 @@
 const express = require('express');
 const association = require('./util/dbAssoc');
 const userRouter = require('./routes/user');
+const meetingRouter = require('./routes/meeting');
 const app = express();
 
 app.use(function (req, res, next) {
@@ -14,6 +15,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 app.use(userRouter);
+app.use(meetingRouter);
 app.get("/", (req,res,next)=>{
   console.log("test");
   res.json({

@@ -1,8 +1,14 @@
 require('dotenv').config();
 const User = require('../model/User');
+const Meeting = require('../model/Meeting');
+const MeetingDetail = require('../model/MeetingDetail');
+const {Op} = require('sequelize');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const key = process.env.TOKEN_SECRET_KEY;
+const cloudinary = require('../util/cloudinary_config');
+const upload=require('../middleware/upload_file');
+const fs = require('fs');
 
 const postUser = async(req,res,next)=>{
   try {
@@ -51,7 +57,6 @@ const postUser = async(req,res,next)=>{
 const loginHandler = async (req,res,next)=>{
 	try {
 		// ambil data dari req body
-		console.log("test");
 		const {email, password} = req.body;
 		console.log(email, password)
 		const currentUser = await User.findOne({
@@ -90,8 +95,8 @@ const loginHandler = async (req,res,next)=>{
 
 	} catch (error) {
 			res.status(error.statusCode || 500).json({
-			status: "Error",
-			message: error.message
+        status: "Error",
+        message: error.message
 			})
 	}
 }
@@ -121,7 +126,7 @@ const getUserByToken = async(req,res,next)=>{
     const userId=payload.userId
     const user = await User.findOne({
       where:{id: userId},
-      attributes: ['id','fullName','email','role'],
+      attributes: ['id','fullName','email','profilePicture','role'],
     })
 
     if(user == undefined){
@@ -144,6 +149,76 @@ const getUserByToken = async(req,res,next)=>{
   }
 }
 
+const changeProfilePicture=async (req,res,next)=>{
+  try {
+    const authorization=req.headers.authorization
+    let token
+    if(authorization!==null && authorization.startsWith("Bearer ")){
+      token=authorization.substring(7)
+    }else{
+      const error=new Error("You need to login")
+      error.statusCode=403
+      throw error
+    }
+    const decoded=jwt.verify(token,key)
+    const currentUser=await User.findOne({
+      where:{
+        id:decoded.userId
+      }
+    })
+    if(!currentUser){
+      const error=new Error(`User with ID ${decoded.userId} doesn't exist!`)
+      error.statusCode=400
+      throw error
+    }
+    let imageUrl
+    if(req.file){
+      const file=req.file
+      const uploadOption={
+        folder:'MeetSync_ProfilePic/',
+        public_id:`user_${currentUser.id}`,
+        overwrite:true
+      }
+      const uploadFile=await cloudinary.uploader.upload(file.path,uploadOption)
+      imageUrl=uploadFile.secure_url
+      fs.unlinkSync(file.path)
+    }
+    currentUser.update(
+      {
+        profilePicture: imageUrl
+      }
+    )
+    res.status(200).json({
+      status:"Success",
+      imageUrl:imageUrl
+    })
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      status: "Error",
+      message: error
+    })
+  }
+}
+
+const getAllUsers = async(req, res, next)=>{
+  try {
+    const users = await User.findAll({
+      attributes: ['id','fullName','email','profilePicture','role'],
+    });
+
+    res.status(200).json({
+      status: "Success",
+      message: "Successfully fetch all user data",
+      users: users
+    })
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      status: "Error",
+      message: error.message
+    })
+  }
+}
+
 module.exports = {
-  postUser, loginHandler, getUserByToken
+  postUser, loginHandler, getUserByToken, changeProfilePicture, getAllUsers,
 }
