@@ -110,7 +110,7 @@ const createSchedule = async(req, res, next)=>{
 		}
 
 
-		res.status(200).json({
+		res.status(201).json({
 			status: "Success",
 			message: "Successfully add new schedule",
 			meeting: newMeetingWithCorrectTimezone
@@ -259,6 +259,160 @@ const bookSpecificMeeting = async(req, res, next)=>{
 	}
 }
 
+const getBookedMeeting = async (req,res,next)=>{
+	try{
+		const authorization=req.headers.authorization
+		let token
+		if(authorization!==null && authorization.startsWith("Bearer ")){
+			token=authorization.substring(7)
+		}else{
+			const error=new Error("You need to login")
+			error.statusCode=403
+			throw error
+		}
+		const decoded=jwt.verify(token,key)
+		const currentUser=await User.findOne({
+			where:{
+				id:decoded.userId
+			}
+		})
+		if(!currentUser){
+			const error=new Error(`User with ID ${decoded.userId} doesn't exist!`)
+			error.statusCode=400
+			throw error
+		}
+		let bookedMeeting;
+		if(currentUser.role=='Student'){
+			bookedMeeting = await MeetingDetail.findAll({
+				where:{
+					studentId:currentUser.id
+				},
+				include:[
+					{
+						model:User,
+						as:'student',
+						attributes:['fullName']
+					},
+					{
+						model:Meeting,
+						attributes:['id','name','description'],
+						include:[{
+							model:User,
+							as:'teacher',
+							attributes:['fullName']
+						}]
+					}
+				]
+			})
+			bookedMeeting = bookedMeeting.map(bookedMeeting => ({
+				...bookedMeeting.toJSON(),
+				datetime_start: formatToTimeZone(bookedMeeting.datetime_start, 'YYYY-MM-DD HH:mm:ss', { timeZone: 'Asia/Jakarta' }),
+				datetime_end: formatToTimeZone(bookedMeeting.datetime_end, 'YYYY-MM-DD HH:mm:ss', { timeZone: 'Asia/Jakarta' })
+			}));
+		}else{
+			bookedMeeting = await Meeting.findAll({
+        where: {
+          teacherId: currentUser.id
+        },
+        attributes: ['id','name', 'description'],
+        include: [{
+          model: User,
+          as: 'teacher',
+          attributes: ['fullName']
+        }]
+      })
+			for(const meeting of bookedMeeting){
+				const meeting_details = await MeetingDetail.findAll({
+					where:{
+						meetingId: meeting.id,
+						studentId: {
+							[Op.not]: null
+						}
+					},
+					include: [{
+						model: User,
+						as: 'student',
+						attributes: ['fullName']
+					}]
+				})
+				const meetingDetailsWithCorrectTimezone = meeting_details.map(meeting_detail => ({
+					...meeting_detail.toJSON(),
+					datetime_start: formatToTimeZone(meeting_detail.datetime_start, 'YYYY-MM-DD HH:mm:ss', { timeZone: 'Asia/Jakarta' }),
+					datetime_end: formatToTimeZone(meeting_detail.datetime_end, 'YYYY-MM-DD HH:mm:ss', { timeZone: 'Asia/Jakarta' })
+				}));
+				meeting.dataValues.details = meetingDetailsWithCorrectTimezone
+			}
+		}
+		res.status(200).json({
+			status: "Success",
+			message: 'Successfully fetch all booked meetinga',
+			meetings:bookedMeeting
+		});
+	}catch(error){
+		res.status(error.statusCode || 500).json({
+			status: "Error",
+			message: error.message
+		});
+	}
+}
+
+const deleteMeeting = async (req, res, next)=>{
+	try{
+		const authorization=req.headers.authorization
+		const {meetingId}=req.params
+		console.log("Meeting id = " + meetingId)
+		let token
+		if(authorization!==null && authorization.startsWith("Bearer ")){
+			token=authorization.substring(7)
+		}else{
+			const error=new Error("You need to login")
+			error.statusCode=403
+			throw error
+		}
+		const decoded=jwt.verify(token,key)
+		const currentUser=await User.findOne({
+			where:{
+				id:decoded.userId
+			}
+		})
+		if(!currentUser){
+			const error=new Error(`User with ID ${decoded.userId} doesn't exist!`)
+			error.statusCode=400
+			throw error
+		}
+		const meeting = await Meeting.findOne({
+			where:{
+				id:meetingId
+			}
+		})
+		if(!meeting){
+			const error=new Error(`Meeting with ID ${meetingId} doesn't exist!`)
+			error.statusCode=400
+			throw error
+		}
+		if(meeting.teacherId!=decoded.userId){
+			const error=new Error('You can\'t delete this meeting!')
+			error.statusCode=403
+			throw error
+		}
+		await MeetingDetail.destroy({
+			where:{
+				meetingId:meetingId
+			}
+		})
+		await meeting.destroy()
+		res.status(200).json({
+			status: "Success",
+			message: `Successfully deleted meeting with ID ${meetingId}.`,
+		});
+	}catch(error){
+		res.status(error.statusCode || 500).json({
+			status: "Error",
+			message: error.message
+		});
+	}
+}
+
 module.exports = {
-	createSchedule, getMeetingDetails, bookSpecificMeeting
+	createSchedule, getMeetingDetails, bookSpecificMeeting, getBookedMeeting, deleteMeeting
 }
