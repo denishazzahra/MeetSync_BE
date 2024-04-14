@@ -9,6 +9,7 @@ const key = process.env.TOKEN_SECRET_KEY;
 const cloudinary = require('../util/cloudinary_config');
 const upload=require('../middleware/upload_file');
 const fs = require('fs');
+const { formatToTimeZone } = require('date-fns-timezone');
 
 const postUser = async(req,res,next)=>{
   try {
@@ -58,7 +59,6 @@ const loginHandler = async (req,res,next)=>{
 	try {
 		// ambil data dari req body
 		const {email, password} = req.body;
-		console.log(email, password)
 		const currentUser = await User.findOne({
 			where:{
 				email: email
@@ -149,9 +149,18 @@ const getUserByToken = async(req,res,next)=>{
   }
 }
 
-const changeProfilePicture=async (req,res,next)=>{
+const editProfile=async (req,res,next)=>{
   try {
     const authorization=req.headers.authorization
+    const { email, fullName } = req.body;
+
+    //kalau user kosongin jangan diubah di db nya
+    if(email==null || fullName==null){
+      const error=new Error('Email and full name can\'t be empty!')
+      error.statusCode=400
+      throw error
+    }
+
     let token
     if(authorization!==null && authorization.startsWith("Bearer ")){
       token=authorization.substring(7)
@@ -164,7 +173,8 @@ const changeProfilePicture=async (req,res,next)=>{
     const currentUser=await User.findOne({
       where:{
         id:decoded.userId
-      }
+      },
+      attributes:['id','fullName','email','profilePicture']
     })
     if(!currentUser){
       const error=new Error(`User with ID ${decoded.userId} doesn't exist!`)
@@ -172,6 +182,8 @@ const changeProfilePicture=async (req,res,next)=>{
       throw error
     }
     let imageUrl
+
+    //kalau ada gambar diupload dia update profpic, kalo gaada skip
     if(req.file){
       const file=req.file
       const uploadOption={
@@ -182,15 +194,34 @@ const changeProfilePicture=async (req,res,next)=>{
       const uploadFile=await cloudinary.uploader.upload(file.path,uploadOption)
       imageUrl=uploadFile.secure_url
       fs.unlinkSync(file.path)
+      currentUser.update(
+        {
+          profilePicture: imageUrl
+        }
+      )
     }
-    currentUser.update(
-      {
-        profilePicture: imageUrl
+
+    //cek email baru udah kepake atau belum
+    const checkUser = await User.findOne({
+      where:{
+        email: email
       }
-    )
+    })
+    if(checkUser && checkUser.id!=currentUser.id){
+      const error=new Error('Email is already used!')
+      error.statusCode=400
+      throw error
+    }
+
+    //update akun
+    currentUser.update({
+      fullName,
+      email
+    })
+
     res.status(200).json({
       status:"Success",
-      imageUrl:imageUrl
+      updatedUser:currentUser
     })
   } catch (error) {
     res.status(error.statusCode || 500).json({
@@ -219,6 +250,73 @@ const getAllUsers = async(req, res, next)=>{
   }
 }
 
+const getTeacherMeetings = async(req, res, next)=>{
+  try{
+    const authorization=req.headers.authorization
+    const {teacherId} = req.params
+    let token
+    if(authorization!==null && authorization.startsWith("Bearer ")){
+      token=authorization.substring(7)
+    }else{
+      const error=new Error("You need to login")
+      error.statusCode=403
+      throw error
+    }
+    const decoded=jwt.verify(token,key)
+    const currentUser=await User.findOne({
+      where:{
+        id:decoded.userId
+      }
+    })
+    if(!currentUser){
+      const error=new Error(`User with ID ${decoded.userId} doesn't exist!`)
+      error.statusCode=400
+      throw error
+    }
+    const user = await User.findOne({
+      where:{
+        id:teacherId
+      }
+    })
+    if(!user){
+      const error=new Error(`Teacher with ID ${teacherId} doesn't exist!`)
+      error.statusCode=400
+      throw error
+    }
+    if(user.role!='Teacher'){
+      const error=new Error(`User with ID ${teacherId} is not a teacher!`)
+      error.statusCode=400
+      throw error
+    }
+    const meeting = await Meeting.findAll({
+      where:{
+        teacherId:teacherId
+      },
+      attributes: ['id', 'name', 'description', 'place', 'datetime_start', 'datetime_end', 'duration_minute', 'teacherId'],
+			include: {
+				model: User,
+				as: 'teacher',
+				attributes: ['fullName']
+			},
+      raw: true,
+    })
+    const meetingsWithCorrectTimezone = meeting.map(meeting => ({
+      ...meeting,
+      datetime_start: formatToTimeZone(meeting.datetime_start, 'YYYY-MM-DD HH:mm:ss', { timeZone: 'Asia/Jakarta' }),
+      datetime_end: formatToTimeZone(meeting.datetime_end, 'YYYY-MM-DD HH:mm:ss', { timeZone: 'Asia/Jakarta' })
+    }));
+    res.status(200).json({
+      status: "Success",
+      message: "Successfully fetch all meeting data",
+      meeting: meetingsWithCorrectTimezone
+    })
+  }catch(error){
+    res.status(error.statusCode || 500).json({
+      status: "Error",
+      message: error.message
+    })
+  }
+}
 module.exports = {
-  postUser, loginHandler, getUserByToken, changeProfilePicture, getAllUsers,
+  postUser, loginHandler, getUserByToken, editProfile, getAllUsers, getTeacherMeetings
 }

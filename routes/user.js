@@ -3,7 +3,9 @@ const router = express.Router();
 const upload=require('../middleware/upload_file')
 
 const { 
-    postUser, loginHandler, getUserByToken, changeProfilePicture, getAllUsers,
+    postUser, loginHandler, getUserByToken, getAllUsers,
+    getTeacherMeetings,
+    editProfile,
   } = require('../controller/user');
   
 // register
@@ -16,9 +18,12 @@ router.get("/users/login", loginHandler);
 router.get("/users/fetch-by-token", getUserByToken);
 
 // ganti profile picture
-router.put("/users/change-profile-picture", upload.single('image'), changeProfilePicture)
+router.put("/users/edit-account", upload.single('image'), editProfile)
 
 // ambil semua user
 router.get("/users/fetch-all", getAllUsers)
+
+// ambil semua meeting milik teacher spesifik
+router.get("/users/meeting-list/:teacherId", getTeacherMeetings)
 
 module.exports = router;
