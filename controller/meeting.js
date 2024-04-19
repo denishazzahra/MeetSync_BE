@@ -239,9 +239,41 @@ const bookSpecificMeeting = async(req, res, next)=>{
 			error.statusCode = 400;
 			throw error;
 		}
-		specificMeeting.update({
-			studentId: decoded.userId
-		})
+		//cek jam segitu udah ada meeting lain apa ngga
+		const checkAvailable = await MeetingDetail.findAll({
+			where: {
+				studentId: currentUser.id,
+				[Op.or]: [
+					{
+						[Op.and]: [
+							{ datetime_end: { [Op.gte]: specificMeeting.datetime_start } },
+							{ datetime_end: { [Op.lte]: specificMeeting.datetime_end } }
+						]
+					},
+					{
+						[Op.and]: [
+							{ datetime_start: { [Op.gte]: specificMeeting.datetime_start } },
+							{ datetime_start: { [Op.lte]: specificMeeting.datetime_end } }
+						]
+					},
+					{
+						[Op.and]: [
+							{ datetime_start: { [Op.lte]: specificMeeting.datetime_start } },
+							{ datetime_end: { [Op.gte]: specificMeeting.datetime_end } }
+						]
+					}
+				]
+			}
+		});
+		if(checkAvailable.length==0){
+			specificMeeting.update({
+				studentId: decoded.userId
+			})
+		}else{
+			const error = new Error('Cannot book the schedule because you already have another meeting at the selected time.');
+			error.statusCode = 400;
+			throw error;
+		}
 		const specificMeetingsWithCorrectTimezone = {...specificMeeting.toJSON(),
       datetime_start: formatToTimeZone(specificMeeting.datetime_start, 'YYYY-MM-DD HH:mm:ss', { timeZone: 'Asia/Jakarta' }),
       datetime_end: formatToTimeZone(specificMeeting.datetime_end, 'YYYY-MM-DD HH:mm:ss', { timeZone: 'Asia/Jakarta' })
