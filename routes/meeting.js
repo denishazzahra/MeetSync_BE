@@ -8,10 +8,14 @@ const {
   bookSpecificMeeting,
   getBookedMeeting,
   deleteMeeting,
+  getAllMeetings,
 } = require("../controller/meeting");
 
 //buat schedule baru
 router.post("/meetings/add-new-meeting", createSchedule);
+
+// get all meetings
+router.get("/meetings/get-meetings", getAllMeetings);
 
 //get meeting details
 router.get("/meetings/get-meeting/:meetingId", getMeetingDetails);
