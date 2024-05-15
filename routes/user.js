@@ -16,7 +16,7 @@ const {
 router.post("/users/register", postUser);
 
 // login
-router.get("/users/login", loginHandler);
+router.post("/users/login", loginHandler);
 
 // lihat profil sendiri
 router.get("/users/fetch-by-token", getUserByToken);
